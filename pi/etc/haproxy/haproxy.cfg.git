@@ -1,0 +1,99 @@
+# ABOUT CERTIFICATE FOR HTTPS HANDLING
+# Following instructions from: https://www.phcomp.co.uk/Tutorials/Web-Technologies/Understanding-and-generating-OpenSSL.cnf-files.html 
+# https://medium.com/@sharmaNK/self-signed-certificate-and-use-them-in-haproxy-and-allow-certificate-in-macos-26c3aad316bb
+# ABOUT users setup https://blog.sleeplessbeastie.eu/2018/03/08/how-to-define-basic-authentication-on-haproxy/
+# NOTE, check all backends servers listen only in localhost, not in 0.0.0.0
+ 
+
+global
+        maxconn 4096
+        user haproxy
+        group haproxy
+        daemon
+        log 127.0.0.1 local0 debug
+
+defaults
+        log     global
+        mode    http
+        option  httplog
+        option  dontlognull
+        retries 3
+        option redispatch
+        option http-server-close
+        option forwardfor
+        maxconn 2000
+        timeout connect 5s
+        timeout client  15min
+        timeout server  15min
+
+userlist basic-auth-list
+        group is-regular-user
+        user <username> password <sha256> groups is-regular-user
+
+
+frontend public
+        bind :::80 v4v6
+
+        bind 0.0.0.0:443 ssl crt /etc/server.pem
+        http-request redirect scheme https unless { ssl_fc }
+
+        use_backend mjpgstreamer if { path_beg /mjpgstreamer/ }
+        use_backend timelapse if { path_beg /timelapse/ }
+        use_backend timelapse if { path_beg /static_timelapse/ }
+        use_backend timelapse if { path_beg /api/v1.0/timelapse/ }
+        use_backend picam if { path_beg /picam/ }
+        use_backend picam if { path_beg /static_picam/ }
+        use_backend picam if { path_beg /api/v1.0/picam/ }
+        use_backend telegram if { path_beg /telegram/ }
+        use_backend telegram if { path_beg /static_telegram/ }
+        use_backend telegram if { path_beg /api/v1.0/telegram/ }
+        use_backend systemStatus if { path_beg /systemStatus/ }
+        use_backend systemStatus if { path_beg /static_systemStatus/ }
+        use_backend systemStatus if { path_beg /api/v1.0/systemStatus/ }
+        use_backend pipapi if { path_beg /pipapi/ }
+        use_backend pipapi if { path_beg /static_pipapi/ }
+        use_backend pipapi if { path_beg /api/v1.0/pipapi/ }
+        use_backend webStreamingAgent if { path_beg /webStreamingAgent/ }
+        use_backend webStreamingAgent if { path_beg /static_webStreamingAgent/ }
+        use_backend webStreamingAgent if { path_beg /api/v1.0/webStreamingAgent/ }
+
+        default_backend main
+
+backend main
+        reqrep ^([^\ :]*)\ /(.*)     \1\ /\2
+        option forwardfor
+        server main1 127.0.0.1:5069
+
+        acl draw-auth http_auth(basic-auth-list)
+        http-request auth realm draw unless draw-auth
+
+backend pipapi
+        reqrep ^([^\ :]*)\ /parcesec/(.*)     \1\ /\2
+        server pipapi1  127.0.0.1:5069
+
+backend picam
+        reqrep ^([^\ :]*)\ /picam/(.*)     \1\ /\2
+        server picam1  127.0.0.1:5061
+
+
+backend telegram
+        reqrep ^([^\ :]*)\ /telegram/(.*)     \1\ /\2
+        server telegram1  127.0.0.1:5161
+
+backend mjpgstreamer
+        reqrep ^([^\ :]*)\ /mjpgstreamer/(.*)     \1\ /\2
+        server mjpgstreamer1  127.0.0.1:9999
+
+backend timelapse
+        reqrep ^([^\ :]*)\ /timelapse/(.*)     \1\ /\2
+        server timelapse1  127.0.0.1:5090
+
+backend systemStatus
+        reqrep ^([^\ :]*)\ /systemStatus/(.*)     \1\ /\2
+        server systemStatus1  127.0.0.1:5050
+
+backend webStreamingAgent
+        reqrep ^([^\ :]*)\ /webStreamingAgent/(.*)     \1\ /\2
+        server webStreamingAgent1  127.0.0.1:5060
+
+
