@@ -1,0 +1,21 @@
+
+<h2>Camera</h2>
+<img src="{{ url_for('static',filename='pg_photo.jpg',parameto=randomhack) }}" />
+
+<h2>Screen</h2>
+<img src="{{ url_for('static',filename='pg_screen.png',parameto=randomhack) }}" />
+
+
+<h2>Pipapi status</h2>
+<table>
+   <tr><th>Buttons</th><th>Pressed</th></tr>
+   <tr><td>White</td><td>{{status.btnWhite}}</td></tr>
+   <tr><td>Red  </td><td>{{status.btnRed}}</td></tr>
+</table>
+
+
+<table>
+   <tr><th>PIR</th><th>Presence</th></tr>
+   <tr><td>Recent presence?</td><td>{{status.pir}}</td></tr>
+</table>
+

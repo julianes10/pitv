@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+    <head>
+      <title>PIPAPI Web Interface</title>
+      <link rel=stylesheet type=text/css href="{{ url_for('static', filename='style.css') }}">
+      <script src="{{url_for('static', filename='tabsmgt.js')}}"></script>
+    </head>
+<body onload="openTab(event, 'mainpipapi')">
+<div class="container">
+  <h1>PIPAPI Interface</h1>
+
+  <!-- Tab links -->
+  <div class="tab">
+    <button class="tablinks" onclick="openTab(event, 'mainpipapi')">Pipapi</button>
+    <button class="tablinks" onclick="openTab(event, 'webStreamingAgent')">StreamingAgent</button>
+    <button class="tablinks" onclick="openTab(event, 'picam')">Picam</button>
+    <button class="tablinks" onclick="openTab(event, 'timelapse')">Timelapse</button>
+    <button class="tablinks" onclick="openTab(event, 'telegram')">Telegram</button>
+    <button class="tablinks" onclick="openTab(event, 'system')">System Status</button>
+  </div>
+
+  <!-- Tab content -->
+
+  <div id="mainpipapi" class="tabcontent">
+     {% include "mainpipapi.html" %}
+  </div>
+
+  <div id="webStreamingAgent" class="tabcontent">
+    <div class="my_iframe">
+      <iframe src="./webStreamingAgent/" frameborder="0" scrolling="no" onload="resizeIframe(this)">
+      </iframe>
+    </div>
+  </div>
+
+  <div id="picam" class="tabcontent">
+    <div class="my_iframe">
+      <iframe src="./picam/" frameborder="0" scrolling="no" onload="resizeIframe(this)">
+      </iframe>
+    </div>
+  </div>
+
+  <div id="timelapse" class="tabcontent">
+    <div class="my_iframe">
+      <iframe src="./timelapse/" frameborder="0" scrolling="no" onload="resizeIframe(this)">
+      </iframe>
+    </div>
+  </div>
+
+  <div id="telegram" class="tabcontent">
+    <div class="my_iframe">
+      <iframe src="./telegram/" frameborder="0" scrolling="no" onload="resizeIframe(this)">
+      </iframe>
+    </div>
+  </div>
+
+  <div id="system" class="tabcontent">
+    <div class="my_iframe">
+      <iframe src="./systemStatus/" frameborder="0" scrolling="no" onload="resizeIframe(this)">
+      </iframe>
+    </div>
+  </div>
+
+
+</div>
+</body>
+</html>
+

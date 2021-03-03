@@ -1,0 +1,15 @@
+[Unit]
+Description=Pipapi logic
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/opt/PROJECT_NAME/SERVICE_NAME/pitv.py --configfile /etc/SERVICE_NAME.conf
+WorkingDirectory=/opt/PROJECT_NAME/SERVICE_NAME/
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
+
+
