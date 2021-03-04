@@ -145,7 +145,8 @@ def  display_clock(oled):
   # Draw the text
   text = time.strftime(" %H:%M")
 
-  draw.text((0, 0),text, font=font, fill=255)
+  draw.text((0, 0),"HORA:", font=font, fill=255)  
+  draw.text((0, 32),text, font=font, fill=255)
   # Display image
   oled.image(image)
 
@@ -173,7 +174,8 @@ def  display_temp(oled,t):
   font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
   # Draw the text
   text = "{:.1f}".format(t) + chr(176)+"C"
-  draw.text((0, 0),text, font=font, fill=255)
+  draw.text((0, 0),"TEMP:", font=font, fill=255)  
+  draw.text((0, 32),text, font=font, fill=255)
   # Display image
   oled.image(image)
 
@@ -200,8 +202,9 @@ def  display_hum(oled,h):
   font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
   # Draw the text
   text = " {:.1f} %".format(h)
-
-  draw.text((0, 0),text, font=font, fill=255)
+  
+  draw.text((0, 0),"HUM:", font=font, fill=255)
+  draw.text((0, 32),text, font=font, fill=255)
   # Display image
   oled.image(image)
 
@@ -224,7 +227,7 @@ def  display_text(oled,text):
     
   image = Image.new("1", (oled.width, oled.height))
   draw = ImageDraw.Draw(image)
-  font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
+  font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 64)
   # Draw the text
   draw.text((0, 0),text, font=font, fill=255)
   # Display image
