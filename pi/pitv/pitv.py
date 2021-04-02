@@ -20,12 +20,23 @@ from flask import Flask, render_template,redirect
 from flask import Flask, jsonify,abort,make_response,request, url_for
 from datetime import datetime
 
+
+
 import requests
 
 
 
 
-
+'''----------------------------------------------------------'''
+'''----------------------------------------------------------'''
+def my_callback(scale_position):
+    helper.internalLogger.debug("ROTARY scale position is {0}".format(scale_position))
+def rs_cb_dec(scale_position):
+    helper.internalLogger.debug("ROTARY dec {0}".format(scale_position))
+def rs_cb_inc(scale_position):
+    helper.internalLogger.debug("ROTARY inc {0}".format(scale_position))
+def rs_cb_sw():
+    helper.internalLogger.debug("ROTARY switch on")
 
 '''----------------------------------------------------------'''
 '''----------------------------------------------------------'''
@@ -310,12 +321,24 @@ def main(configfile):
       GPIO.setmode(GPIO.BCM)
       GPIO.setup(GLB_configuration["PIR"]["pin"], GPIO.IN) 
       GPIO.setup(GLB_configuration["white-button"]["pin"], GPIO.IN,pull_up_down=GPIO.PUD_DOWN)
-      GPIO.setup(GLB_configuration["red-button"]["pin"], GPIO.IN,pull_up_down=GPIO.PUD_DOWN)
-
-
-     
+      GPIO.setup(GLB_configuration["red-button"]["pin"], GPIO.IN,pull_up_down=GPIO.PUD_DOWN)     
       oled=setupDisplay()
 
+
+    if amIaPi():
+      from pyky040 import pyky040
+      my_encoder = pyky040.Encoder(CLK=5, DT=6, SW=13)
+  
+      # Setup the options and callbacks (see documentation)
+      my_encoder.setup(scale_min=0, scale_max=100, step=1, chg_callback=my_callback,inc_callback=rs_cb_inc,dec_callback=rs_cb_dec,sw_callback=rs_cb_sw)
+
+
+
+  
+      # Create the thread
+      my_thread = threading.Thread(target=my_encoder.watch)
+      # Launch the thread
+      my_thread.start()
 
     global GLB_PIR
     global GLB_bWhite
