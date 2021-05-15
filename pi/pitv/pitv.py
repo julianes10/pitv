@@ -21,10 +21,121 @@ from flask import Flask, jsonify,abort,make_response,request, url_for
 from datetime import datetime
 
 
-
 import requests
+import queue
 
 
+
+class RotarySwitch:
+  def __init__(self,config):
+    self.timestamp = 0
+    self.q = queue.Queue()
+    self.config=config
+    self.setMenu("root")
+    self.latestActivity = 0
+          
+  def setMenu(self,m):
+    try:
+      self.currentMenu=m
+      self.currentMenuOption=self.config["menu"][self.currentMenu]["options"][0]
+    except Exception as e:
+      helper.internalLogger.debug("Error setting menu: {0}, fallback to root".format(m))
+      helper.einternalLogger.exception(e)
+      self.currentMenu="root"
+      self.currentMenuOption=self.config["menu"][self.currentMenu]["options"][0]
+
+  def switchOn(self):
+    ev={}
+    ev["switch"]=True
+    self.q.put(ev)
+
+  def left(self,value):
+    ev={}
+    ev["left"]=value
+    self.q.put(ev)
+
+  def right(self,value):
+    ev={}
+    ev["right"]=value
+    self.q.put(ev)
+
+  def doSwitchOn(self):
+    if self.currentMenuOption == "..":
+      self.setMenu("root")  #TODO better recall history
+      display_menu(oled,self.currentMenu,self.currentMenuOption)
+      return
+    item=self.config["menu"][self.currentMenuOption]
+    helper.internalLogger.debug("Switching On for {0}...".format(self.currentMenuOption))
+    try:
+      #Execute associated command
+      if "cmd" in item:
+         runCmdBackground(item["cmd"])
+      #Show display
+      if "display" in item:
+         display_text(oled,item["display"])
+      #Show display
+      if "options" in item:
+         self.setMenu(self.currentMenuOption)
+         display_menu(oled,self.currentMenu,self.currentMenuOption)
+    except Exception as e:
+      helper.internalLogger.debug("Error processing rotary event...")
+      helper.einternalLogger.exception(e)
+          
+    return False
+
+  def doRight(self,value):
+    maxlen=len(self.config["menu"][self.currentMenu]["options"])
+    currentPos=self.config["menu"][self.currentMenu]["options"].index(self.currentMenuOption)
+    newPos=currentPos + 1
+    if (newPos) >= (maxlen):
+      newPos=0
+    self.currentMenuOption=self.config["menu"][self.currentMenu]["options"][newPos]
+    display_menu(oled,self.currentMenu,self.currentMenuOption)
+
+  def doLeft(self,value):
+    maxlen=len(self.config["menu"][self.currentMenu]["options"])
+    currentPos=self.config["menu"][self.currentMenu]["options"].index(self.currentMenuOption)
+    newPos=currentPos - 1
+    if (currentPos) <= 0:
+      newPos=maxlen-1
+    self.currentMenuOption=self.config["menu"][self.currentMenu]["options"][newPos]
+    display_menu(oled,self.currentMenu,self.currentMenuOption)
+
+  def refresh(self):
+    now = time.time()
+    rt=False
+    try:
+      helper.internalLogger.debug("Checking queue...")
+      while not self.q.empty():       
+        self.latestActivity=now
+        rt=True
+        helper.internalLogger.debug("Processing event...")
+        ev=self.q.get()
+        helper.internalLogger.debug("Event {0}".format(ev))
+        if (now - self.latestActivity) > self.config["timeout"]:
+          helper.internalLogger.debug("Waking from standby event ignored, just display legacy menu")
+          display_menu(oled,self.currentMenu,self.currentMenuOption)
+          continue
+        
+        if "switch" in ev:
+          helper.internalLogger.debug("EV SWITCH ON") 
+          self.doSwitchOn()   
+        elif "left" in ev:
+          helper.internalLogger.debug("EV LEFT: {0}".format(ev["left"]))
+          self.doLeft(ev["left"])
+        elif "right" in ev:
+          helper.internalLogger.debug("EV RIGHT: {0}".format(ev["right"]))
+          self.doRight(ev["right"])
+        else:
+          helper.internalLogger.debug("Unknown event...")
+    except Exception as e:
+      helper.internalLogger.debug("Error processing rotary event...")
+      helper.einternalLogger.exception(e)
+
+    if (now - self.latestActivity) < self.config["timeout"]:
+      rt=True #Forcing showing menu for a while    
+
+    return rt
 
 
 '''----------------------------------------------------------'''
@@ -33,10 +144,17 @@ def my_callback(scale_position):
     helper.internalLogger.debug("ROTARY scale position is {0}".format(scale_position))
 def rs_cb_dec(scale_position):
     helper.internalLogger.debug("ROTARY dec {0}".format(scale_position))
+    #filtering out odds
+    if scale_position%2==0:
+      rs.right(scale_position)
 def rs_cb_inc(scale_position):
     helper.internalLogger.debug("ROTARY inc {0}".format(scale_position))
+    #filtering out odds
+    if scale_position%2==0:
+      rs.left(scale_position)
 def rs_cb_sw():
     helper.internalLogger.debug("ROTARY switch on")
+    rs.switchOn()
 
 '''----------------------------------------------------------'''
 '''----------------------------------------------------------'''
@@ -89,9 +207,6 @@ def get_pitv_status():
 
 def getStatus():
     rt={}
-    rt['btnWhite']=GLB_bWhite
-    rt['btnRed']=GLB_bRed
-    rt['pir']=GLB_PIR
     return rt
 
 
@@ -103,27 +218,51 @@ def pitv_gui_clean(name):
    #TODO cleanProject(name)
    return redirect(url_for('pitv_home'))
 
+@api.route('/pitv/rs/left/<value>',methods=["GET"])
+def pitv_rs_left(value):
+   helper.internalLogger.debug("REST rs left {0}...".format(value))
+   rs.left(value)
+   return "ok"
+@api.route('/pitv/rs/right/<value>',methods=["GET"])
+def pitv_rs_right(value):
+   helper.internalLogger.debug("REST rs right {0}...".format(value))
+   rs.right(value)
+   return "ok"
+@api.route('/pitv/rs/switchOn',methods=["GET"])
+def pitv_rs_switch():
+   helper.internalLogger.debug("REST rs switchOn ...")
+   rs.switchOn()
+   return "ok"
 
 
-'''----------------------------------------------------------'''
-def  getDHT():
-  # Create blank image for drawing.  
-  rtt = 0.0
-  rth = 0.0
+class DHT:
+  def __init__(self):
+    self.t = 0
+    self.h = 0
 
-  try:
-    response = requests.get(GLB_configuration["dht-query"])
-    helper.internalLogger.debug("getTemperature response {0}...".format(response.json()))
+  def  refresh(self):
+    # Create blank image for drawing.  
+    rtt = 0.0
+    rth = 0.0
+    try:
+     if not "dht-query" in GLB_configuration:
+       return
+     response = requests.get(GLB_configuration["dht-query"])
+     helper.internalLogger.debug("getTemperature response {0}...".format(response.json()))
    
-    rth=float(response.json()[0]["humidity"])
-    rtt=float(response.json()[0]["temperature"])
-  except Exception as e:
-    e = sys.exc_info()[0]
-    helper.internalLogger.warning('Error: Exception getting dht data properly')
-    helper.einternalLogger.exception(e)  
+     rth=float(response.json()[0]["humidity"])
+     rtt=float(response.json()[0]["temperature"])
+    except Exception as e:
+     e = sys.exc_info()[0]
+     helper.internalLogger.warning('Error: Exception getting dht data properly')
+     helper.einternalLogger.exception(e)  
+    self.t=rtt
+    self.h=rth
+  def getTemp(self):
+    return self.t
+  def getHum(self):
+    return self.h
 
-
-  return rtt,rth
 
 
 '''----------------------------------------------------------'''
@@ -161,17 +300,11 @@ def  display_clock(oled):
   # Display image
   oled.image(image)
 
-  if GLB_PIR:
-    oled.pixel(0, 31, 1)
-    oled.pixel(0, 30, 1)
-    oled.pixel(1, 31, 1)
-    oled.pixel(1, 30, 1)
-
-
   oled.show()
 
 '''----------------------------------------------------------'''
-def  display_temp(oled,t):
+def  display_temp(oled):
+  t=dht.getTemp()
   # Create blank image for drawing.
   if amIaPi():
     import board
@@ -190,16 +323,17 @@ def  display_temp(oled,t):
   # Display image
   oled.image(image)
 
-  if GLB_PIR:
-    oled.pixel(0, 31, 1)
-    oled.pixel(0, 30, 1)
-    oled.pixel(1, 31, 1)
-    oled.pixel(1, 30, 1)
+
 
   oled.show()
 
+
+
+
+
 '''----------------------------------------------------------'''
-def  display_hum(oled,h):
+def  display_hum(oled):
+  h=dht.getHum()
   # Create blank image for drawing.
   if amIaPi():
     import board
@@ -219,11 +353,6 @@ def  display_hum(oled,h):
   # Display image
   oled.image(image)
 
-  if GLB_PIR:
-    oled.pixel(0, 31, 1)
-    oled.pixel(0, 30, 1)
-    oled.pixel(1, 31, 1)
-    oled.pixel(1, 30, 1)
 
   oled.show()
 
@@ -241,6 +370,29 @@ def  display_text(oled,text):
   font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 64)
   # Draw the text
   draw.text((0, 0),text, font=font, fill=255)
+  # Display image
+  oled.image(image)
+  oled.show()
+
+
+
+'''----------------------------------------------------------'''
+def  display_menu(oled,menu,item):
+  # Create blank image for drawing.
+  if amIaPi():
+    import board
+    import digitalio
+    from PIL import Image, ImageDraw, ImageFont
+    import adafruit_ssd1306
+    
+  image = Image.new("1", (oled.width, oled.height))
+  draw = ImageDraw.Draw(image)
+  font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
+  # Draw the text
+  draw.text((0, 0),menu, font=font, fill=255)  
+
+  font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 48)
+  draw.text((0, 15),item, font=font, fill=255)
   # Display image
   oled.image(image)
   oled.show()
@@ -290,6 +442,15 @@ def main(configfile):
   cfg_log_exceptions="pitve.log"
 
   global GLB_configuration
+  global dht
+  global rs
+  global oled
+
+  dht = DHT()
+
+  
+
+
   
   GLB_configuration={}
   with open(configfile) as json_data:
@@ -302,10 +463,13 @@ def main(configfile):
         cfg_log_exceptions = GLB_configuration["log"]["logExceptions"]
   helper.init(cfg_log_debugs,cfg_log_exceptions)
 
+
   print('See logs debugs in: {0} and exeptions in: {1}-----------'.format(cfg_log_debugs,cfg_log_exceptions))  
   helper.internalLogger.critical('pitv-start -------------------------------')  
   helper.einternalLogger.critical('pitv-start -------------------------------')
 
+
+  rs  = RotarySwitch(GLB_configuration["rs"])
 
   try:    
     logging.getLogger("requests").setLevel(logging.DEBUG) 
@@ -315,109 +479,54 @@ def main(configfile):
     apiRestTask.daemon = True
     apiRestTask.start()
 
+    helper.internalLogger.debug("Starting DHTRestTask...")
+    DHTRestTask=threading.Thread(target=DHTrest_task,name="DHTrest")
+    DHTRestTask.daemon = True
+    DHTRestTask.start()
+
+
     if amIaPi():
       import RPi.GPIO as GPIO
       GPIO.setwarnings(False)
       GPIO.setmode(GPIO.BCM)
-      GPIO.setup(GLB_configuration["PIR"]["pin"], GPIO.IN) 
-      GPIO.setup(GLB_configuration["white-button"]["pin"], GPIO.IN,pull_up_down=GPIO.PUD_DOWN)
-      GPIO.setup(GLB_configuration["red-button"]["pin"], GPIO.IN,pull_up_down=GPIO.PUD_DOWN)     
       oled=setupDisplay()
-
-
-    if amIaPi():
       from pyky040 import pyky040
       my_encoder = pyky040.Encoder(CLK=5, DT=6, SW=13)
-  
-      # Setup the options and callbacks (see documentation)
-      my_encoder.setup(scale_min=0, scale_max=100, step=1, chg_callback=my_callback,inc_callback=rs_cb_inc,dec_callback=rs_cb_dec,sw_callback=rs_cb_sw)
-
-
-
-  
-      # Create the thread
+      my_encoder.setup(scale_min=0, scale_max=100, step=1,inc_callback=rs_cb_inc,dec_callback=rs_cb_dec,sw_callback=rs_cb_sw)
       my_thread = threading.Thread(target=my_encoder.watch)
-      # Launch the thread
       my_thread.start()
 
-    global GLB_PIR
-    global GLB_bWhite
-    global GLB_bRed
-
-
-    GLB_PIR=False
-    GLB_bWhite=False
-    GLB_bRed=False
-
     helper.internalLogger.debug("Start pooling...")  
-
     st = 0
     latestSecProcessed=0
-    PIRBk = False
-    bWhiteBk = False
-    bRedBk = False
+
+    display_text(oled,"HI")  
+    time.sleep(2)
+    
     while (True):
      if not amIaPi():
       time.sleep(5)
      else:
       sec=int(time.time())
-      GLB_PIR    = GPIO.input(GLB_configuration["PIR"]["pin"])==1
-      GLB_bWhite = GPIO.input(GLB_configuration["white-button"]["pin"])==1
-      GLB_bRed   = GPIO.input(GLB_configuration["red-button"]["pin"])==1
-
-      if GLB_bWhite != bWhiteBk and bWhiteBk==False:  
-        # Falling edge  
-        runCmdBackground(GLB_configuration["white-button"]["cmd"])
-        sendEvent("button","White button pressed")
-
-      if GLB_bRed != bRedBk and bRedBk==False: 
-        # Falling edge         
-        runCmdBackground(GLB_configuration["red-button"]["cmd"])
-        sendEvent("button","Red button pressed")
-
-      PIRBk = GLB_PIR
-      bWhiteBk = GLB_bWhite
-      bRedBk = GLB_bRed
-
-
-      try:
-        if GLB_bWhite and GLB_bRed:
-          display_text(oled,"ROJ-BLA")  
-          #TODO 
-          continue     
-        if GLB_bWhite:
-          display_text(oled,"BLANCO")  
-          continue
-        if GLB_bRed:
-          display_text(oled,"ROJO")  
-
-          continue
-      except Exception as e:
-        e = sys.exc_info()[0]
-        helper.internalLogger.debug('Error: Exception unprocessed properly. Exiting')
-        helper.einternalLogger.exception(e)  
-
 
       # simple display control  
       if (sec%10 == 0):          
         if latestSecProcessed != sec:
           latestSecProcessed=sec  
-          #time to change state
-          t,h=getDHT()
           st=st+1
           if st > 2:
             st=0
-      
-      if st==0:  
-        display_clock(oled)
-      elif st==1:
-        display_temp(oled,t)
-      elif st==2:
-        display_hum(oled,h)
-      else:
-        display_text(oled,"KO-------------OK")
-  
 
+      if rs.refresh() == False: 
+	      if st==0:  
+		      display_clock(oled)
+	      elif st==1:
+		      display_temp(oled)
+	      elif st==2:
+		      display_hum(oled)
+	      else:
+		      display_text(oled,"KO-------------OK")
+  
       print(round(time.time()))
       time.sleep(0.1)
  
@@ -436,6 +545,15 @@ def apirest_task():
 
   api.run(debug=True, use_reloader=False,port=GLB_configuration["port"],host=GLB_configuration["host"])
 
+'''----------------------------------------------------------'''
+'''----------------     apirest_task      -------------------'''
+def DHTrest_task():
+  while (True):
+    dht.refresh();
+    if "dht-query-interval" in GLB_configuration:
+      time.sleep(GLB_configuration["dht-query-interval"])
+    else:
+      time.sleep(60)
 
 '''----------------------------------------------------------'''
 '''----------------       loggingEnd      -------------------'''
