@@ -23,7 +23,7 @@
 
 // --- General Settings
 const uint16_t 
-	Num_Leds   =  88;//16+28 *2 ;         // strip length
+	Num_Leds   =  97;// ;         // strip length
 const uint8_t
 	Brightness =  255;        // maximum brightness
 
