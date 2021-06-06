@@ -105,7 +105,7 @@ class RotarySwitch:
     now = time.time()
     rt=False
     try:
-      helper.internalLogger.debug("Checking queue...")
+      #helper.internalLogger.debug("Checking queue...")
       while not self.q.empty():       
         self.latestActivity=now
         rt=True
@@ -291,12 +291,12 @@ def  display_clock(oled):
     
   image = Image.new("1", (oled.width, oled.height))
   draw = ImageDraw.Draw(image)
-  font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
+  font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 19)
+  font2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 44)
   # Draw the text
-  text = time.strftime(" %H:%M")
-
-  draw.text((0, 0),"HORA:", font=font, fill=255)  
-  draw.text((0, 32),text, font=font, fill=255)
+  text = time.strftime("%H:%M")
+  draw.text((0, 0),"HORA", font=font, fill=255)  
+  draw.text((0, 20),text, font=font2, fill=255)
   # Display image
   oled.image(image)
 
@@ -315,11 +315,16 @@ def  display_temp(oled):
     
   image = Image.new("1", (oled.width, oled.height))
   draw = ImageDraw.Draw(image)
-  font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
+  font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
+  font2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 53)
+  font3 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 30)
   # Draw the text
-  text = "{:.1f}".format(t) + chr(176)+"C"
-  draw.text((0, 0),"TEMP:", font=font, fill=255)  
-  draw.text((0, 32),text, font=font, fill=255)
+  text = "{:.1f}".format(t)
+  text2 = chr(176)
+  #text = "{:.1f}".format(t)
+  draw.text((0, 0),"TEMPERATURA", font=font, fill=255)  
+  draw.text((0, 11),text, font=font2, fill=255)
+  draw.text((115, 15),text2, font=font3, fill=255)
   # Display image
   oled.image(image)
 
@@ -344,12 +349,15 @@ def  display_hum(oled):
     
   image = Image.new("1", (oled.width, oled.height))
   draw = ImageDraw.Draw(image)
-  font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
+  font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
+  font2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 49)
+  font3 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
   # Draw the text
-  text = " {:.1f} %".format(h)
-  
-  draw.text((0, 0),"HUM:", font=font, fill=255)
-  draw.text((0, 32),text, font=font, fill=255)
+  text = "{:.1f}".format(h)
+  text2 = "%"
+  draw.text((0, 0),"HUMEDAD", font=font, fill=255)  
+  draw.text((0, 15),text, font=font2, fill=255)
+  draw.text((110, 44),text2, font=font3, fill=255)
   # Display image
   oled.image(image)
 
