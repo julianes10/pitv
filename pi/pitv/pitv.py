@@ -263,6 +263,21 @@ class DHT:
   def getHum(self):
     return self.h
 
+class DHTremote:
+  def __init__(self,name):
+    self.t = 0
+    self.h = 0
+    self.id=name
+
+  def  refresh(self,tt,hh):
+    self.t = tt
+    self.h = hh
+
+  def getTemp(self):
+    return self.t
+  def getHum(self):
+    return self.h
+
 
 
 '''----------------------------------------------------------'''
@@ -303,8 +318,7 @@ def  display_clock(oled):
   oled.show()
 
 '''----------------------------------------------------------'''
-def  display_temp(oled):
-  t=dht.getTemp()
+def  display_temp(oled,msg,t):
   # Create blank image for drawing.
   if amIaPi():
     import board
@@ -315,16 +329,16 @@ def  display_temp(oled):
     
   image = Image.new("1", (oled.width, oled.height))
   draw = ImageDraw.Draw(image)
-  font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
-  font2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 53)
+  font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 8)
+  font2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 56)
   font3 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 30)
   # Draw the text
   text = "{:.1f}".format(t)
   text2 = chr(176)
   #text = "{:.1f}".format(t)
-  draw.text((0, 0),"TEMPERATURA", font=font, fill=255)  
-  draw.text((0, 11),text, font=font2, fill=255)
-  draw.text((115, 15),text2, font=font3, fill=255)
+  draw.text((0, 0),msg, font=font, fill=255)  
+  draw.text((0, 8),text, font=font2, fill=255)
+  draw.text((116, 11),text2, font=font3, fill=255)
   # Display image
   oled.image(image)
 
@@ -337,8 +351,7 @@ def  display_temp(oled):
 
 
 '''----------------------------------------------------------'''
-def  display_hum(oled):
-  h=dht.getHum()
+def  display_hum(oled,msg,h):
   # Create blank image for drawing.
   if amIaPi():
     import board
@@ -355,7 +368,7 @@ def  display_hum(oled):
   # Draw the text
   text = "{:.1f}".format(h)
   text2 = "%"
-  draw.text((0, 0),"HUMEDAD", font=font, fill=255)  
+  draw.text((0, 0),msg, font=font, fill=255)  
   draw.text((0, 15),text, font=font2, fill=255)
   draw.text((110, 44),text2, font=font3, fill=255)
   # Display image
@@ -451,11 +464,12 @@ def main(configfile):
 
   global GLB_configuration
   global dht
+  global dhtRemote
   global rs
   global oled
 
   dht = DHT()
-
+  dhtRemote = DHTremote("DHT1")
   
 
 
@@ -493,6 +507,11 @@ def main(configfile):
     DHTRestTask.start()
 
 
+    helper.internalLogger.debug("Starting DHTRemoteTask...")
+    DHTRemoteTask=threading.Thread(target=DHTremote_task,name="DHTremote")
+    DHTRemoteTask.daemon = True
+    DHTRemoteTask.start()
+
     if amIaPi():
       import RPi.GPIO as GPIO
       GPIO.setwarnings(False)
@@ -508,7 +527,7 @@ def main(configfile):
     st = 0
     latestSecProcessed=0
 
-    display_text(oled,"HI")  
+    display_text(oled,"PITV!")  
     time.sleep(2)
     
     while (True):
@@ -518,20 +537,24 @@ def main(configfile):
       sec=int(time.time())
 
       # simple display control  
-      if (sec%10 == 0):          
+      if (sec%5 == 0):          
         if latestSecProcessed != sec:
           latestSecProcessed=sec  
           st=st+1
-          if st > 2:
+          if st > 6:
             st=0
 
       if rs.refresh() == False: 
 	      if st==0:  
 		      display_clock(oled)
-	      elif st==1:
-		      display_temp(oled)
-	      elif st==2:
-		      display_hum(oled)
+	      elif st==1 or st==2:
+		      display_temp(oled,"SALON",dht.getTemp())
+	      elif st==3:
+		      display_hum(oled,"SALON",dht.getHum())
+	      elif st==4 or st==5:
+		      display_temp(oled,"         TERRAZA",dhtRemote.getTemp())
+	      elif st==6:
+		      display_hum(oled,"         TERRAZA",dhtRemote.getHum())
 	      else:
 		      display_text(oled,"KO-------------OK")
   
@@ -554,7 +577,7 @@ def apirest_task():
   api.run(debug=True, use_reloader=False,port=GLB_configuration["port"],host=GLB_configuration["host"])
 
 '''----------------------------------------------------------'''
-'''----------------     apirest_task      -------------------'''
+'''----------------     DHTrest_task      -------------------'''
 def DHTrest_task():
   while (True):
     dht.refresh();
@@ -562,6 +585,40 @@ def DHTrest_task():
       time.sleep(GLB_configuration["dht-query-interval"])
     else:
       time.sleep(60)
+
+
+'''----------------------------------------------------------'''
+'''----------------     DHTremote_task      -------------------'''
+def DHTremote_task():
+  import socket
+  UDP_IP = "0.0.0.0"
+  UDP_PORT = 3000
+
+  try:
+    sock = socket.socket(socket.AF_INET, # Internet
+                         socket.SOCK_DGRAM) # UDP
+    sock.bind((UDP_IP, UDP_PORT))
+    while True:
+      data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
+      print("Receive message {0} ".format(data))
+      try:
+        s=data.decode('utf-8').split(',')
+        sensor=s[0]
+        temp=float(s[1])
+        hum=float(s[2])
+        helper.internalLogger.debug("Sensor id {0}, temp {1}, hum {2} ".format(sensor,temp,hum))
+        #TODO select right dht
+        dhtRemote.refresh(temp,hum)
+      except Exception as e:
+        e = sys.exc_info()[0]
+        helper.internalLogger.debug('Error: Exception receiving dht remote data')
+        helper.einternalLogger.exception(e)  
+  except Exception as e:
+    e = sys.exc_info()[0]
+    helper.internalLogger.warning('Error: Exception listening at dht remote socket')
+    helper.einternalLogger.exception(e)  
+
+
 
 '''----------------------------------------------------------'''
 '''----------------       loggingEnd      -------------------'''
