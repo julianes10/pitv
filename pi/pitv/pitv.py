@@ -239,6 +239,8 @@ class DHT:
   def __init__(self):
     self.t = 0
     self.h = 0
+    self.valid=False
+    self.lastValid=None
 
   def  refresh(self):
     # Create blank image for drawing.  
@@ -252,6 +254,9 @@ class DHT:
    
      rth=float(response.json()[0]["humidity"])
      rtt=float(response.json()[0]["temperature"])
+     self.valid=True
+     self.lastValid = time.time()
+
     except Exception as e:
      e = sys.exc_info()[0]
      helper.internalLogger.warning('Error: Exception getting dht data properly')
@@ -262,22 +267,31 @@ class DHT:
     return self.t
   def getHum(self):
     return self.h
+  def isValid(self):
+    return self.valid
+
 
 class DHTremote:
   def __init__(self,name):
     self.t = 0
     self.h = 0
     self.id=name
+    self.valid=False
+    self.lastValid=None
 
   def  refresh(self,tt,hh):
     self.t = tt
     self.h = hh
+    self.valid=True
+    self.lastValid = time.time()
 
   def getTemp(self):
     return self.t
   def getHum(self):
     return self.h
 
+  def isValid(self):
+    return self.valid
 
 
 '''----------------------------------------------------------'''
@@ -541,15 +555,18 @@ def main(configfile):
         if latestSecProcessed != sec:
           latestSecProcessed=sec  
           st=st+1
-          if st > 6:
+          st_max=3
+          if dhtRemote.isValid():
+            st_max=6
+          if st > st_max:
             st=0
 
       if rs.refresh() == False: 
 	      if st==0:  
 		      display_clock(oled)
-	      elif st==1 or st==2:
+	      elif (st==1 or st==2) and (dht.isValid()):
 		      display_temp(oled,"SALON",dht.getTemp())
-	      elif st==3:
+	      elif st==3 and (dht.isValid()):
 		      display_hum(oled,"SALON",dht.getHum())
 	      elif st==4 or st==5:
 		      display_temp(oled,"         TERRAZA",dhtRemote.getTemp())
