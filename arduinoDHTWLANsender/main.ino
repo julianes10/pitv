@@ -16,16 +16,21 @@
 #define DHTPIN 7        // Digital pin connected to the DHT sensor
 #define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
 
+#define PIN_LED_STRIP             6
+
+#define NUM_LEDS 22
+
 //------------------------------------------------
 //--- GLOBAL VARIABLES ---------------------------
 //------------------------------------------------
 SimpleTimer mainTimers;
 int  GLB_timerMisc=-1;
 bool GLB_timerMisc_expired=false;
+int GLB_ledTest = 0;
 #define TIMEOUT_SEND_DHT    5000
+#define TIMEOUT_LS_TEST    250
 
-#define PIN_LED_STRIP  2
-#define NUM_LEDS 23 //7+7+7+1+1
+
 CRGB GLBledStripBufferMem[NUM_LEDS];
 LSEM GLBledStrip(GLBledStripBufferMem,NUM_LEDS);
 
@@ -36,6 +41,8 @@ DHT GLBsensorDHT(DHTPIN, DHTTYPE);
 
 float GLBsensorDHTTemp=0.0;
 float GLBsensorDHTHum=0.0;
+
+
 
 
 //------------------------------------------------
@@ -91,7 +98,7 @@ void GLBcallbackLoggingLedStrip(void)
 //-------------------------------------------------
 void sendDHTData(){
 
-
+  return;
   Serial.println("send data...");
   ESPserial.print("AT+CIPMUX=1\r\n");
   delay(1000);
@@ -155,6 +162,9 @@ void setup() {
 
   GLBsensorDHT.begin();
 
+  FastLED.addLeds<WS2812B,PIN_LED_STRIP,GRB>(GLBledStripBufferMem,NUM_LEDS);
+
+
   Serial.println(F("BD"));
 
 }
@@ -174,8 +184,20 @@ void goto_idle()
 //-------------------------------------------------
 void STATE_welcome()
 {
- // TODO 
-    goto_idle();  
+ // TODO    goto_idle();  
+  if   (GLB_timerMisc == -1)
+  {
+    GLB_timerMisc=mainTimers.setTimeout(TIMEOUT_LS_TEST,GLBcallbackTimeoutMisc);
+  }
+  else if (GLB_timerMisc_expired){
+    GLB_timerMisc_expired=false;
+    resetTimerMisc();
+    //goto_idle(); 
+    GLBledStrip.setAllLeds(0x0);  
+    GLBledStrip.setLed(((GLB_ledTest++)%NUM_LEDS),0xAAAAAA);  
+    GLB_timerMisc=mainTimers.setTimeout(TIMEOUT_LS_TEST,GLBcallbackTimeoutMisc);
+    Serial.print(F("x"));
+  }
 }
 
 //-------------------------------------------------
@@ -205,6 +227,8 @@ void STATE_sendingData()
   sendDHTData();
   goto_idle();  
 }
+
+
 
 //-------------------------------------------------
 //-------------------------------------------------
@@ -274,11 +298,19 @@ void loop() {
       if (aux == 'x')   {
         sendDHTData();
       }  
+      if (aux == 'w')   {
+        GLBledStrip.setAllLeds(0x0);  
+        GLBledStrip.setLed(((GLB_ledTest++)%NUM_LEDS),0xAAAAAA);  
+      }  
   }
+
+  // Prepare digits to show
+  //GLBledStrip.setAllLeds(0xAAAAAA);  
+
  
   // ------------- OUTPUT REFRESHING ---------------
   // In state
-  // FastLED.show();
+  FastLED.show();
 }
 
 
